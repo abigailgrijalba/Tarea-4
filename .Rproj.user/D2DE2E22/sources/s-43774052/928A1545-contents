@@ -1,0 +1,164 @@
+## Operaciones de geometr?as con datos raster
+
+# Carga de paquetes
+library(sf)
+library(spData)
+library(raster)
+library(dplyr)
+
+# Carga de la capa de provincias
+provincias <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_provincias_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+
+# Carga de la capa de mam?feros
+mamiferos <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/gbif/mammalia-cr-registros.csv",
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ),
+    quiet = TRUE
+  )
+
+# Asignaci?n del sistema de coordenadas
+st_crs(mamiferos) <- 4326
+
+# Intersecciones geom?tricas
+# Especificar el directorio
+setwd("C:/Users/abbyg/Desktop/Procesamiento de datos")
+getwd()
+
+# Obtenci?n de la capa de altitud
+alt <-
+  getData(
+    "worldclim",
+    var = "alt",
+    res = .5,
+    lon = -84,
+    lat = 10
+  )
+
+# Reproyecci?n de la capa de altitud a CRTM05
+alt <-
+  alt %>%
+  projectRaster(crs = 5367)
+
+# Recorte de la capa de altitud con base en la capa vectorial de provincias
+altitud <-
+  alt %>%
+  crop(provincias) %>%
+  mask(provincias)
+
+plot(
+  altitud,
+  ext = extent(280000, 660000, 880000, 1250000),
+  main = "Altitud de Costa Rica",
+  axes = TRUE
+)
+
+# Objeto raster para intersecar con el de altitud
+recorte <-
+  raster(
+    xmn = -84.5,
+    xmx = -83.5,
+    ymn = 9.5,
+    ymx = 10.5,
+    res = 0.5
+  )
+
+recorte <-
+  recorte %>%
+  projectRaster(crs = 5367)
+
+# Intersecci?n de altitud y recorte
+altitud_recorte <- altitud[recorte, drop = FALSE]
+
+plot(
+  provincias$geometry,
+  extent = extent(280000, 660000, 880000, 1250000),
+  main = "Recorte de altitud de Costa Rica",
+  axes = TRUE,
+  graticule = TRUE
+)
+
+plot(altitud_recorte,
+     add = TRUE)
+
+# Objeto raster de elevaci?n
+plot(elev)
+
+# Modificaci?n de la extensi?n del objeto raster
+elev_2 <- extend(elev, c(1, 2), value = 1000)
+plot(elev_2)
+
+# Suma de dos objetos raster no alineados
+elev_3 <- elev + elev_2
+plot(elev_3)
+
+# Impresi?n del origen de un objeto raster
+origin(elev)
+
+# Cambio del origen de un objeto raster
+origin(elev_4) <- c(0.25, 0.25)
+
+plot(elev_4)
+plot(elev, add = TRUE)
+
+
+# Agregaci?n
+# Agrupaci?n de la capa de altitud de Costa Rica
+altitud_agregada <- 
+  altitud %>%
+  aggregate(fact = 8, fun = mean)
+
+# Capa de altitud agrupada de Costa Rica
+plot(
+  altitud_agregada,
+  ext = extent(280000, 660000, 880000, 1250000),
+  main = "Capa agrupada de altitud de Costa Rica",
+  axes = TRUE)
+
+# Tama?o de la capa original de altitud
+object.size(altitud)
+
+# Tama?o de la capa agrupada de altitud
+object.size(altitud_agregada)
+
+# crop() a capa de altitud
+altitud <-
+  alt %>%
+  crop(provincias)
+
+plot(
+  altitud,
+  ext = extent(280000, 660000, 880000, 1250000),
+  main = "crop() a capa de altitud de Costa Rica",
+  axes = TRUE)
+
+# crop() + mask() a capa de altitud
+altitud <-
+  alt %>%
+  crop(provincias) %>%
+  mask(provincias)
+
+plot(
+  altitud,
+  ext = extent(280000, 660000, 880000, 1250000),
+  main = "crop() + mask() a capa de altitud de Costa Rica",
+  axes = TRUE)
+
+# Columna con la altitud de cada registro de mam?feros con base en la capa raster de altitud
+mamiferos <-
+  mamiferos %>%
+  st_transform(crs = 5367)
+
+mamiferos$altitud <- raster::extract(altitud, mamiferos)
+
+mamiferos %>%
+  dplyr::select(order, family, genus, species, altitud) %>%
+  arrange(desc(altitud)) %>%
+  slice(1:10)
